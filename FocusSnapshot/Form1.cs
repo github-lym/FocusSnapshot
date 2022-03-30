@@ -25,6 +25,9 @@ namespace FocusSnapshot
 
     public partial class Form1 : Form
     {
+        [DllImport("user32.dll")]
+        private static extern int SetWindowText(IntPtr hWnd, string text);
+
         public const UInt32 FLASHW_ALL = 3;
 
         // Flash continuously until the window comes to the foreground.
@@ -33,6 +36,9 @@ namespace FocusSnapshot
         //private string md5_fileList = @"./md5_fileList.txt";
 
         private List<int> pID_list = new List<int>();
+        private Dictionary<int, string> pID_file = new Dictionary<int, string>();
+
+        private const Int32 WM_MOUSEWHEEL = 522; //0x0115;
 
         public Form1()
         {
@@ -68,6 +74,10 @@ namespace FocusSnapshot
 
         [DllImport("user32.dll")]
         internal static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        //To scroll
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, int wParam);
 
         // To support flashing.
         [DllImport("user32.dll")]
@@ -134,20 +144,28 @@ namespace FocusSnapshot
         {
             IntPtr hWnd; //change this to IntPtr
             Process[] processRunning = Process.GetProcesses();
+            Point p = new Point(0, 0);
 
             foreach (Process pr in processRunning)
             {
                 if (pr.ProcessName == "cmd" && pID_list.Contains(pr.Id))
                 {
                     hWnd = pr.MainWindowHandle; //use it as IntPtr not int
+
+                    ShowWindow(hWnd, 9);
                     ShowWindow(hWnd, 5);
                     SetForegroundWindow(hWnd); //set to topmost
+
+                    SetWindowText(hWnd, pID_file[pr.Id]);
+                    ScrollWindow(hWnd, 15000);
 
                     Thread.Sleep(100);
 
                     PrintScreen();
 
                     Thread.Sleep(100);
+
+                    //pr.CloseMainWindow();
                 }
             }
 
@@ -174,6 +192,11 @@ namespace FocusSnapshot
             printscreen.Save(fileFullPath, ImageFormat.Jpeg);
         }
 
+        private void ScrollWindow(IntPtr hwnd, int scrolls)
+        {
+            SendMessage(hwnd, 522U, scrolls << 16);
+        }
+
         private void ReadListExecute(string fullPath)
         {
             if (!File.Exists(fullPath))
@@ -193,18 +216,31 @@ namespace FocusSnapshot
                     int pID = -1;
 
                     pID_list.Clear();
+                    pID_file.Clear();
 
                     while ((line = reader.ReadLine()) != null)
                     {
-                        //System.Diagnostics.Process.Start(line);
+                        string errMsg = string.Empty;
 
                         if (!File.Exists(line))
                         {
                             MessageBox.Show(line + "=>檔案不存在");
                             return;
                         }
-                        pID = System.Diagnostics.Process.Start(line).Id;
+                        //System.Diagnostics.Process p = new System.Diagnostics.Process();
+                        //p.StartInfo.UseShellExecute = false;
+                        //p.StartInfo.RedirectStandardInput = true;
+                        //p.StartInfo.RedirectStandardOutput = true;
+                        //p.StartInfo.RedirectStandardError = true;
+                        //p.StartInfo.FileName = line;
+                        //p.Start();
+                        //pID = p.Id;
+                        System.Diagnostics.Process p = System.Diagnostics.Process.Start(line);
+
+                        pID = p.Id;
+                        //pID = System.Diagnostics.Process.Start(line).Id;
                         pID_list.Add(pID);
+                        pID_file.Add(pID, System.IO.Path.GetFileName(line));
                     }
                 }
             }
