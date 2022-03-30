@@ -3,6 +3,4 @@
 
 
 初版執行畫面
-<video width="320" height="240" controls>
-    <source src="demo.mp4" type="video/mp4">
-</video>
+https://github.com/github-lym/FocusSnapshot/blob/main/demo.mp4
