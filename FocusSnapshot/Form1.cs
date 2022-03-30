@@ -37,8 +37,10 @@ namespace FocusSnapshot
 
         private List<int> pID_list = new List<int>();
         private Dictionary<int, string> pID_file = new Dictionary<int, string>();
-
+        private string timestamp = string.Empty;
+        private string folderPath = string.Empty;
         private const Int32 WM_MOUSEWHEEL = 522; //0x0115;
+        private string exePath = string.Empty;
 
         public Form1()
         {
@@ -102,6 +104,359 @@ namespace FocusSnapshot
             }
         }
 
+        private void Btn_Snapshot_Click(object sender, EventArgs e)
+        {
+            IntPtr hWnd; //change this to IntPtr
+            Process[] processRunning = Process.GetProcesses();
+            Point p = new Point(0, 0);
+            string titleText = string.Empty;
+            foreach (Process pr in processRunning)
+            {
+                if (pr.ProcessName == "cmd" && pID_list.Contains(pr.Id))
+                {
+                    if (!"C:\\Windows\\system32\\cmd.exe".Equals(pr.MainWindowTitle.ToString()))
+                    {
+                        hWnd = pr.MainWindowHandle; //use it as IntPtr not int
+
+                        ShowWindow(hWnd, 9);
+                        ShowWindow(hWnd, 5);
+                        SetForegroundWindow(hWnd); //set to topmost
+
+                        return;
+                    }
+                }
+            }
+
+            foreach (Process pr in processRunning)
+            {
+                if (pr.ProcessName == "cmd" && pID_list.Contains(pr.Id))
+                {
+                    hWnd = pr.MainWindowHandle; //use it as IntPtr not int
+
+                    ShowWindow(hWnd, 9);
+                    ShowWindow(hWnd, 5);
+                    SetForegroundWindow(hWnd); //set to topmost
+
+                    SetWindowText(hWnd, pID_file[pr.Id]);
+                    ScrollWindow(hWnd, 15000);
+
+                    Thread.Sleep(100);
+
+                    PrintScreen(System.IO.Path.GetFileName(pID_file[pr.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", ""));
+
+                    Thread.Sleep(100);
+
+                    pr.CloseMainWindow();
+                }
+            }
+
+            FlashWindowEx(this);
+        }
+
+        private void PrintScreen(string jpgFileName)
+        {
+            Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
+
+            Graphics graphics = Graphics.FromImage(printscreen as Image);
+
+            graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
+
+            if (!Directory.Exists(Path.Combine(exePath, folderPath)))
+            {
+                //新增資料夾
+                Directory.CreateDirectory(Path.Combine(exePath, folderPath));
+            }
+
+            //string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmssffffff") + ".jpg";
+            //string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + jpgFileName + ".jpg";
+            string fileFullPath = $"{Path.Combine(exePath, folderPath, timestamp)}_{jpgFileName}.jpg";
+
+            printscreen.Save(fileFullPath, ImageFormat.Jpeg);
+        }
+
+        private void PrintTotalScreen()
+        {
+            Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
+
+            Graphics graphics = Graphics.FromImage(printscreen as Image);
+
+            graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
+
+            if (!Directory.Exists(Path.Combine(exePath, folderPath)))
+            {
+                //新增資料夾
+                Directory.CreateDirectory(Path.Combine(exePath, folderPath));
+            }
+
+            //string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmssffffff") + ".jpg";
+            string fileFullPath = $"{Path.Combine(exePath, folderPath, timestamp)}_total.jpg";
+
+            printscreen.Save(fileFullPath, ImageFormat.Jpeg);
+        }
+
+        private void ScrollWindow(IntPtr hwnd, int scrolls)
+        {
+            SendMessage(hwnd, 522U, scrolls << 16);
+        }
+
+        /// <summary>
+        /// RedirectStandardOutput + Thread
+        /// </summary>
+
+        private void ReadListExecute(string fullPath)
+        {
+            if (!File.Exists(fullPath))
+            {
+                MessageBox.Show(fullPath + "=>檔案不存在");
+                return;
+            }
+
+            DialogResult result = MessageBox.Show("確定執行\n" + fullPath, "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
+
+            timestamp = string.Empty;
+            if (result == DialogResult.Yes)
+            {
+                string line = string.Empty;
+                exePath = System.IO.Directory.GetCurrentDirectory();
+                timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                folderPath = DateTime.Now.ToString("yyyy-MM-dd");
+                string pTitle = string.Empty;
+
+                if (!Directory.Exists(Path.Combine(exePath, folderPath)))
+                {
+                    //新增資料夾
+                    Directory.CreateDirectory(Path.Combine(exePath, folderPath));
+                }
+                using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
+                {
+                    int pID = -1;
+
+                    pID_list.Clear();
+                    pID_file.Clear();
+
+                    try
+                    {
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            var thread = new Thread(new ThreadStart(() =>
+                            {
+                                string line_cmd = line;
+                                string errMsg = string.Empty;
+                                string output = string.Empty;
+                                string batPath = System.IO.Path.GetFullPath(line_cmd).Replace(System.IO.Path.GetFileName(line_cmd), "");
+                                StringBuilder sb;
+                                StringBuilder retryStr;
+
+                                if (!File.Exists(line_cmd))
+                                {
+                                    MessageBox.Show(line_cmd + "=>檔案不存在");
+                                    return;
+                                }
+
+                                Process p = new Process();
+                                p.StartInfo.UseShellExecute = false;
+                                p.StartInfo.RedirectStandardError = true;
+                                //p.StartInfo.RedirectStandardInput = true;
+                                p.StartInfo.RedirectStandardOutput = true;
+                                //p.EnableRaisingEvents = true;
+
+                                p.StartInfo.FileName = line_cmd;
+                                p.Start();
+
+                                pID = p.Id;
+                                //pID = System.Diagnostics.Process.Start(line).Id;
+                                pID_list.Add(pID);
+                                pID_file.Add(pID, line_cmd);
+
+                                pTitle = p.MainWindowTitle.ToString();
+
+                                //p.BeginOutputReadLine();
+                                //p.BeginErrorReadLine();
+
+                                errMsg = p.StandardError.ReadToEnd();
+                                output = p.StandardOutput.ReadToEnd();
+                                if (output.Contains("BUILD SUCCESSFUL"))
+                                {
+                                    sb = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    {
+                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                        {
+                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
+                                            srOutFile.Write(sb.ToString());
+                                        }
+                                    }
+                                }
+                                else if (!string.IsNullOrEmpty(errMsg))
+                                {
+                                    sb = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    {
+                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                        {
+                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
+                                            srOutFile.Write(sb.ToString());
+                                        }
+                                    }
+
+                                    retryStr = new StringBuilder();
+                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_retry.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    {
+                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                        {
+                                            retryStr.AppendLine($"{line_cmd}");
+                                            srOutFile.Write(retryStr.ToString());
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    sb = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    {
+                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                        {
+                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
+                                            srOutFile.Write(sb.ToString());
+                                        }
+                                    }
+                                }
+
+                                p.WaitForExit(1000);
+                            }));
+
+                            thread.Start();
+                            Thread.Sleep(200);
+                        }
+
+                        PrintTotalScreen();
+                    }
+                    catch (Exception ex)
+                    {
+                        string ss = ex.ToString();
+                        string sss = ex.ToString();
+                        MessageBox.Show(ex.ToString());
+                    }
+                }
+            }
+            else
+            {
+            }
+        }
+
+        /// <summary>
+        /// 導向輸出版本
+        /// </summary>
+        /*
+        private void ReadListExecute(string fullPath)
+        {
+            if (!File.Exists(fullPath))
+            {
+                MessageBox.Show(fullPath + "=>檔案不存在");
+                return;
+            }
+
+            DialogResult result = MessageBox.Show("確定執行\n" + fullPath, "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
+
+            if (result == DialogResult.Yes)
+            {
+                folderPath = DateTime.Now.ToString("yyyy-MM-dd");
+                string line = string.Empty;
+                string exePath = System.IO.Directory.GetCurrentDirectory();
+                timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
+                {
+                    int pID = -1;
+
+                    pID_list.Clear();
+                    pID_file.Clear();
+
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        string errMsg = string.Empty;
+                        string batPath = System.IO.Path.GetFullPath(line).Replace(System.IO.Path.GetFileName(line), "");
+                        StringBuilder sb = new StringBuilder();
+
+                        if (!File.Exists(line))
+                        {
+                            MessageBox.Show(line + "=>檔案不存在");
+                            return;
+                        }
+                        Process p = new Process();
+                        p.StartInfo.FileName = $"{line} > {Path.Combine(batPath, folderPath, timestamp)}{System.IO.Path.GetFileName(line).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt";
+
+                        p.Start();
+
+                        pID = p.Id;
+                        pID_list.Add(pID);
+                        pID_file.Add(pID, line);
+                    }
+
+                    PrintTotalScreen();
+                }
+            }
+            else
+            {
+            }
+        }
+        */
+        /// <summary>
+        /// 正常輸出版本
+        /// </summary>
+        /*
+    private void ReadListExecute_bak(string fullPath)
+    {
+        if (!File.Exists(fullPath))
+        {
+            MessageBox.Show(fullPath + "=>檔案不存在");
+            return;
+        }
+
+        DialogResult result = MessageBox.Show("確定執行\n" + fullPath, "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
+
+        if (result == DialogResult.Yes)
+        {
+            string line = string.Empty;
+            string exePath = System.IO.Directory.GetCurrentDirectory();
+            string nowTime = DateTime.Now.ToString("yyyyMMdd_HHmm");
+            using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
+            {
+                int pID = -1;
+
+                pID_list.Clear();
+                pID_file.Clear();
+
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string errMsg = string.Empty;
+                    string batPath = System.IO.Path.GetFullPath(line).Replace(System.IO.Path.GetFileName(line), "");
+                    StringBuilder sb = new StringBuilder();
+
+                    if (!File.Exists(line))
+                    {
+                        MessageBox.Show(line + "=>檔案不存在");
+                        return;
+                    }
+                    Process p = new Process();
+                    p.StartInfo.FileName = line;
+
+                    p.Start();
+
+                    pID = p.Id;
+                    pID_list.Add(pID);
+                    pID_file.Add(pID, line);
+                }
+            }
+        }
+        else
+        {
+        }
+    }
+    */
+
         //private void Btn_MD5_Check_Click(object sender, EventArgs e)
         //{
         //    if (!File.Exists(md5_fileList))
@@ -139,114 +494,5 @@ namespace FocusSnapshot
 
         //    MessageBox.Show("MD5 Checksum完成!!" + "\n" + "產生MD5_Result.text");
         //}
-
-        private void Btn_Snapshot_Click(object sender, EventArgs e)
-        {
-            IntPtr hWnd; //change this to IntPtr
-            Process[] processRunning = Process.GetProcesses();
-            Point p = new Point(0, 0);
-
-            foreach (Process pr in processRunning)
-            {
-                if (pr.ProcessName == "cmd" && pID_list.Contains(pr.Id))
-                {
-                    hWnd = pr.MainWindowHandle; //use it as IntPtr not int
-
-                    ShowWindow(hWnd, 9);
-                    ShowWindow(hWnd, 5);
-                    SetForegroundWindow(hWnd); //set to topmost
-
-                    SetWindowText(hWnd, pID_file[pr.Id]);
-                    ScrollWindow(hWnd, 15000);
-
-                    Thread.Sleep(100);
-
-                    PrintScreen();
-
-                    Thread.Sleep(100);
-
-                    //pr.CloseMainWindow();
-                }
-            }
-
-            FlashWindowEx(this);
-        }
-
-        private void PrintScreen()
-        {
-            Bitmap printscreen = new Bitmap(Screen.PrimaryScreen.Bounds.Width, Screen.PrimaryScreen.Bounds.Height);
-
-            Graphics graphics = Graphics.FromImage(printscreen as Image);
-
-            graphics.CopyFromScreen(0, 0, 0, 0, printscreen.Size);
-
-            string folderPath = DateTime.Now.ToString("yyyy-MM-dd");
-            if (!Directory.Exists(".\\" + folderPath))
-            {
-                //新增資料夾
-                Directory.CreateDirectory(".\\" + folderPath);
-            }
-
-            string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmssffffff") + ".jpg";
-
-            printscreen.Save(fileFullPath, ImageFormat.Jpeg);
-        }
-
-        private void ScrollWindow(IntPtr hwnd, int scrolls)
-        {
-            SendMessage(hwnd, 522U, scrolls << 16);
-        }
-
-        private void ReadListExecute(string fullPath)
-        {
-            if (!File.Exists(fullPath))
-            {
-                MessageBox.Show(fullPath + "=>檔案不存在");
-                return;
-            }
-
-            DialogResult result = MessageBox.Show("確定執行\n" + fullPath, "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
-
-            if (result == DialogResult.Yes)
-            {
-                string line = string.Empty;
-
-                using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
-                {
-                    int pID = -1;
-
-                    pID_list.Clear();
-                    pID_file.Clear();
-
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        string errMsg = string.Empty;
-
-                        if (!File.Exists(line))
-                        {
-                            MessageBox.Show(line + "=>檔案不存在");
-                            return;
-                        }
-                        //System.Diagnostics.Process p = new System.Diagnostics.Process();
-                        //p.StartInfo.UseShellExecute = false;
-                        //p.StartInfo.RedirectStandardInput = true;
-                        //p.StartInfo.RedirectStandardOutput = true;
-                        //p.StartInfo.RedirectStandardError = true;
-                        //p.StartInfo.FileName = line;
-                        //p.Start();
-                        //pID = p.Id;
-                        System.Diagnostics.Process p = System.Diagnostics.Process.Start(line);
-
-                        pID = p.Id;
-                        //pID = System.Diagnostics.Process.Start(line).Id;
-                        pID_list.Add(pID);
-                        pID_file.Add(pID, System.IO.Path.GetFileName(line));
-                    }
-                }
-            }
-            else
-            {
-            }
-        }
     }
 }
