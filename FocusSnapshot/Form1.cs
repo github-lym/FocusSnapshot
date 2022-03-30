@@ -41,6 +41,7 @@ namespace FocusSnapshot
         private string folderPath = string.Empty;
         private const Int32 WM_MOUSEWHEEL = 522; //0x0115;
         private string exePath = string.Empty;
+        private const int MaxNum = 20;
 
         public Form1()
         {
@@ -170,7 +171,6 @@ namespace FocusSnapshot
             //string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmssffffff") + ".jpg";
             //string fileFullPath = @".\\" + folderPath + "\\" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + jpgFileName + ".jpg";
             string fileFullPath = $"{Path.Combine(exePath, folderPath, timestamp)}_{jpgFileName}.jpg";
-
             printscreen.Save(fileFullPath, ImageFormat.Jpeg);
         }
 
@@ -211,8 +211,9 @@ namespace FocusSnapshot
                 return;
             }
 
-            DialogResult result = MessageBox.Show("確定執行\n" + fullPath, "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
+            DialogResult result = MessageBox.Show($"確定執行\n{fullPath}", "請好好確定執行檔案是否正確", MessageBoxButtons.YesNoCancel);
 
+            //string batPath = string.Empty;
             timestamp = string.Empty;
             if (result == DialogResult.Yes)
             {
@@ -221,37 +222,81 @@ namespace FocusSnapshot
                 timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 folderPath = DateTime.Now.ToString("yyyy-MM-dd");
                 string pTitle = string.Empty;
+                int lineCount = 0;
+                //StringBuilder retryStr;
 
                 if (!Directory.Exists(Path.Combine(exePath, folderPath)))
                 {
                     //新增資料夾
                     Directory.CreateDirectory(Path.Combine(exePath, folderPath));
                 }
-                using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
+
+                try
                 {
-                    int pID = -1;
-
-                    pID_list.Clear();
-                    pID_file.Clear();
-
-                    try
+                    using (StreamReader reader = new StreamReader(fullPath, Encoding.UTF8))
                     {
+                        int pID = -1;
+
+                        pID_list.Clear();
+                        pID_file.Clear();
+
+                        //string batPath = System.IO.Path.GetFullPath(line).Replace(System.IO.Path.GetFileName(line), "");
+
                         while ((line = reader.ReadLine()) != null)
                         {
+                            string line_cmd = line;
+
+                            if ("--".Equals(line_cmd.Substring(0, 2)))
+                            {
+                                WriteList($"{line_cmd}", Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"));
+                                continue;
+                            }
+
+                            if (!File.Exists(line_cmd))
+                            {
+                                //MessageBox.Show(line_cmd + "=>檔案不存在");
+
+                                //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                //{
+                                //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                //    {
+                                //        retryStr = new StringBuilder();
+                                //        retryStr.AppendLine($"-- ==> 檔案不存在 {line_cmd}");
+                                //        srOutFile.Write(retryStr.ToString());
+                                //    }
+                                //}
+
+                                WriteList($"-- ==> 檔案不存在 {line_cmd}", Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"));
+
+                                continue;
+                            }
+
+                            lineCount++;
+                            if (lineCount > MaxNum)
+                            {
+                                //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                //{
+                                //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                //    {
+                                //        retryStr = new StringBuilder();
+                                //        retryStr.AppendLine($"{line_cmd}");
+                                //        srOutFile.Write(retryStr.ToString());
+                                //    }
+                                //}
+
+                                WriteList($"{line_cmd}", Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"));
+
+                                continue;
+                            }
+
                             var thread = new Thread(new ThreadStart(() =>
                             {
-                                string line_cmd = line;
                                 string errMsg = string.Empty;
                                 string output = string.Empty;
-                                string batPath = System.IO.Path.GetFullPath(line_cmd).Replace(System.IO.Path.GetFileName(line_cmd), "");
-                                StringBuilder sb;
-                                StringBuilder retryStr;
-
-                                if (!File.Exists(line_cmd))
-                                {
-                                    MessageBox.Show(line_cmd + "=>檔案不存在");
-                                    return;
-                                }
+                                //string batPath = System.IO.Path.GetFullPath(line_cmd).Replace(System.IO.Path.GetFileName(line_cmd), "");
+                                //StringBuilder sb;
+                                //StringBuilder retryStr;
+                                //StringBuilder doneStr;
 
                                 Process p = new Process();
                                 p.StartInfo.UseShellExecute = false;
@@ -275,55 +320,91 @@ namespace FocusSnapshot
 
                                 errMsg = p.StandardError.ReadToEnd();
                                 output = p.StandardOutput.ReadToEnd();
+
                                 if (output.Contains("BUILD SUCCESSFUL"))
                                 {
-                                    sb = new StringBuilder();
+                                    //sb = new StringBuilder();
                                     //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    {
-                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
-                                        {
-                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
-                                            srOutFile.Write(sb.ToString());
-                                        }
-                                    }
-                                }
-                                else if (!string.IsNullOrEmpty(errMsg))
-                                {
-                                    sb = new StringBuilder();
-                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    {
-                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
-                                        {
-                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
-                                            srOutFile.Write(sb.ToString());
-                                        }
-                                    }
+                                    //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //{
+                                    //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                    //    {
+                                    //        sb.AppendLine($"{line_cmd.Replace(exePath, "")} => {output.Replace(exePath.Remove(exePath.Length - 1), "")} : {errMsg}");
+                                    //        srOutFile.Write(sb.ToString());
+                                    //    }
+                                    //}
+                                    WriteList($@"{line_cmd.Replace(exePath, "")} => {output.Replace(exePath, "")} : {errMsg}", Path.Combine(exePath, folderPath, $@"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"));
 
-                                    retryStr = new StringBuilder();
-                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_retry.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    {
-                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
-                                        {
-                                            retryStr.AppendLine($"{line_cmd}");
-                                            srOutFile.Write(retryStr.ToString());
-                                        }
-                                    }
+                                    //doneStr = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //{
+                                    //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                    //    {
+                                    //        doneStr.AppendLine($"--{line_cmd}");
+                                    //        srOutFile.Write(doneStr.ToString());
+                                    //    }
+                                    //}
+
+                                    WriteList($@"--{line_cmd}", Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"));
                                 }
+                                //else if (!string.IsNullOrEmpty(errMsg))
                                 else
                                 {
-                                    sb = new StringBuilder();
-                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
-                                    {
-                                        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
-                                        {
-                                            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
-                                            srOutFile.Write(sb.ToString());
-                                        }
-                                    }
+                                    //sb = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}_err.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //{
+                                    //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                    //    {
+                                    //        sb.AppendLine($"{line_cmd.Replace(exePath, "")} => {output.Replace(exePath.Remove(exePath.Length - 1), "")} : {errMsg}");
+                                    //        srOutFile.Write(sb.ToString());
+                                    //    }
+                                    //}
+                                    //MessageBox.Show("line_cmd :" + line_cmd);
+                                    //MessageBox.Show($"0.{line_cmd}");
+                                    //MessageBox.Show($"0.{exePath}");
+                                    //MessageBox.Show($"1.{line_cmd.Replace(exePath, "")}");
+                                    //MessageBox.Show($"2.{output.Replace(exePath, "")}");
+                                    //MessageBox.Show($"3.{errMsg}");
+                                    //MessageBox.Show($"4.{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}_err.txt");
+
+                                    WriteList($"{line_cmd.Replace(exePath, "")} => {output.Replace(exePath, "")} : {errMsg}", Path.Combine(exePath, folderPath, $@"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}_err.txt"));
+
+                                    //retryStr = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_retry.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //{
+                                    //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                    //    {
+                                    //        retryStr.AppendLine($"{line_cmd}");
+                                    //        srOutFile.Write(retryStr.ToString());
+                                    //    }
+                                    //}
+
+                                    //retryStr = new StringBuilder();
+                                    //using (FileStream fs = new FileStream(Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                    //{
+                                    //    using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                    //    {
+                                    //        retryStr.AppendLine($"{line_cmd}");
+                                    //        srOutFile.Write(retryStr.ToString());
+                                    //    }
+                                    //}
+
+                                    WriteList(line_cmd, Path.Combine(exePath, folderPath, $"{timestamp}_List.txt"));
                                 }
+                                //else
+                                //{
+                                //    sb = new StringBuilder();
+                                //    //using (FileStream fs = new FileStream(Path.Combine(folderPath, $"{timestamp}_{System.IO.Path.GetFileName(line_cmd)}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                //    using (FileStream fs = new FileStream(Path.Combine(batPath, folderPath, $"{timestamp}_{System.IO.Path.GetFileName(pID_file[p.Id]).Replace("tbqb.", "").Replace("tcqb.", "").Replace("_tpe", "").Replace("_edu", "").Replace(".bat", "")}.txt"), FileMode.Append, FileAccess.Write, FileShare.None))
+                                //    {
+                                //        using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                                //        {
+                                //            sb.AppendLine($"{line_cmd.Replace(batPath, "")} => {output.Replace(batPath.Remove(batPath.Length - 1), "")} : {errMsg}");
+                                //            srOutFile.Write(sb.ToString());
+                                //        }
+                                //    }
+                                //}
 
                                 p.WaitForExit(1000);
                             }));
@@ -334,16 +415,33 @@ namespace FocusSnapshot
 
                         PrintTotalScreen();
                     }
-                    catch (Exception ex)
-                    {
-                        string ss = ex.ToString();
-                        string sss = ex.ToString();
-                        MessageBox.Show(ex.ToString());
-                    }
+                }
+                catch (Exception ex)
+                {
+                    //string ss = ex.ToString();
+                    //string sss = ex.ToString();
+                    MessageBox.Show(ex.ToString());
                 }
             }
             else
             {
+            }
+        }
+
+        private void WriteList(string content, string listPath)
+        {
+            using (FileStream fs = new FileStream(listPath, FileMode.Append, FileAccess.Write, FileShare.None))
+            {
+                using (StreamWriter srOutFile = new StreamWriter(fs, Encoding.Unicode))
+                {
+                    StringBuilder sb = new StringBuilder();
+                    sb.AppendLine(content);
+                    srOutFile.Write(sb.ToString());
+                    srOutFile.Close();
+                    srOutFile.Dispose();
+                    fs.Close();
+                    fs.Dispose();
+                }
             }
         }
 
